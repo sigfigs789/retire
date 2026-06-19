@@ -194,13 +194,13 @@ export default function Basic() {
       <div className="chart-wrap">
         <ResponsiveContainer width="100%" height={300}>
           <LineChart data={rows.map(r => ({
-            year: r.calYear,
+            age: r.age,
             Expected: Math.round(r.expected),
             'Infl. Adjusted': Math.round(r.inflAdj),
             ...(r.actual !== null ? { Actual: r.actual } : {}),
           }))} margin={{ top: 8, right: 16, left: 16, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-            <XAxis dataKey="year" tick={{ fill: '#6b7280', fontSize: 11 }} tickLine={false} axisLine={false} />
+            <XAxis dataKey="age" tick={{ fill: '#6b7280', fontSize: 11 }} tickLine={false} axisLine={false} />
             <YAxis tickFormatter={v => v >= 1e6 ? `$${(v/1e6).toFixed(1)}M` : `$${(v/1000).toFixed(0)}k`} tick={{ fill: '#6b7280', fontSize: 11 }} tickLine={false} axisLine={false} width={72} />
             <Tooltip
               contentStyle={{ background: '#1f2937', border: '1px solid #374151', borderRadius: '0.5rem', fontSize: '0.8rem' }}
