@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 const fmt$ = (v) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
@@ -256,6 +257,30 @@ export default function Advanced() {
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="chart-wrap">
+        <ResponsiveContainer width="100%" height={300}>
+          <LineChart data={rows.map((row, i) => ({
+            year: row.calYear,
+            ...Object.fromEntries(cases.map((c, ci) => [c.label, Math.round(projected[ci]?.[i]?.expected ?? 0)])),
+            ...(row.actual !== null ? { Actual: row.actual } : {}),
+          }))} margin={{ top: 8, right: 16, left: 16, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+            <XAxis dataKey="year" tick={{ fill: '#6b7280', fontSize: 11 }} tickLine={false} axisLine={false} />
+            <YAxis tickFormatter={v => v >= 1e6 ? `$${(v/1e6).toFixed(1)}M` : `$${(v/1000).toFixed(0)}k`} tick={{ fill: '#6b7280', fontSize: 11 }} tickLine={false} axisLine={false} width={72} />
+            <Tooltip
+              contentStyle={{ background: '#1f2937', border: '1px solid #374151', borderRadius: '0.5rem', fontSize: '0.8rem' }}
+              labelStyle={{ color: '#9ca3af', marginBottom: '0.35rem' }}
+              formatter={(v, name) => [new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v), name]}
+            />
+            <Legend wrapperStyle={{ fontSize: '0.78rem', paddingTop: '0.75rem' }} />
+            {cases.map((c, ci) => (
+              <Line key={ci} type="monotone" dataKey={c.label} stroke={['#818cf8','#2dd4bf','#34d399'][ci]} strokeWidth={2} dot={false} />
+            ))}
+            <Line type="monotone" dataKey="Actual" stroke="#fbbf24" strokeWidth={2} dot={{ r: 3, fill: '#fbbf24' }} connectNulls={false} />
+          </LineChart>
+        </ResponsiveContainer>
       </div>
 
       <div className="table-wrap">

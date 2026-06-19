@@ -555,6 +555,15 @@ body {
   color: #4b5563;
 }
 
+/* Chart */
+.chart-wrap {
+  background: #111827;
+  border: 1px solid #1f2937;
+  border-radius: 0.75rem;
+  padding: 1.25rem 0.5rem 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
 /* Table colspan headers */
 .case-header {
   text-align: center !important;
