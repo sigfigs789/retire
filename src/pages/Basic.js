@@ -67,6 +67,7 @@ export default function Basic() {
   const [spouseSS, setSpouseSS] = useState(3);
   const [drawdownRate, setDrawdownRate] = useState(4);
   const [annualContribution, setAnnualContribution] = useState(24000);
+  const [startingAge, setStartingAge] = useState(32);
 
   const rows = useMemo(() => {
     return Array.from({ length: years }, (_, i) => {
@@ -80,9 +81,9 @@ export default function Basic() {
       const actual = rawActual !== undefined && rawActual !== '' ? parseFloat(rawActual) : null;
       const pctDiff = actual !== null && !isNaN(actual) ? ((actual - expected) / expected) * 100 : null;
       const dollDiff = actual !== null && !isNaN(actual) ? actual - expected : null;
-      return { year, calYear, expected, inflAdj, actual, pctDiff, dollDiff };
+      return { year, calYear, age: startingAge + year, expected, inflAdj, actual, pctDiff, dollDiff };
     });
-  }, [initialValue, years, arr, inflation, actuals]);
+  }, [initialValue, years, arr, inflation, actuals, startingAge]);
 
   const finalExpected = rows.at(-1)?.expected ?? 0;
   const finalInflAdj = rows.at(-1)?.inflAdj ?? 0;
@@ -116,6 +117,7 @@ export default function Basic() {
               />
             </div>
           </div>
+          <Field label="Starting Age" value={startingAge} onChange={setStartingAge} min={1} max={80} step={1} suffix="yrs" />
           <Field label="Years to Retirement" value={years} onChange={setYears} min={1} max={50} step={1} suffix="yrs" />
           <Field label="Annual Rate of Return" value={arr} onChange={setArr} min={0} max={20} step={0.1} suffix="%" />
           <Field label="Inflation Rate" value={inflation} onChange={setInflation} min={0} max={10} step={0.1} suffix="%" />
@@ -193,6 +195,7 @@ export default function Basic() {
           <thead>
             <tr>
               <th>Year</th>
+              <th>Age</th>
               <th>Expected</th>
               <th>Infl. Adjusted</th>
               <th>Actual</th>
@@ -207,6 +210,7 @@ export default function Basic() {
               return (
                 <tr key={row.year} className={hasActual ? (positive ? 'row-positive' : 'row-negative') : ''}>
                   <td className="col-year">{row.calYear}</td>
+                  <td className="muted">{row.age}</td>
                   <td>{fmt$(row.expected)}</td>
                   <td className="muted">{fmt$(row.inflAdj)}</td>
                   <td>

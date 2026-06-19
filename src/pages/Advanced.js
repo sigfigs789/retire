@@ -66,6 +66,7 @@ export default function Advanced() {
   const [spouseSS, setSpouseSS] = useState(3);
   const [drawdownRate, setDrawdownRate] = useState(4);
   const [annualContribution, setAnnualContribution] = useState(24000);
+  const [startingAge, setStartingAge] = useState(32);
 
   const combinedSSMonthly = SS_LEVELS[selfSS].monthly + SS_LEVELS[spouseSS].monthly;
   const combinedSSAnnual = combinedSSMonthly * 12;
@@ -90,9 +91,9 @@ export default function Advanced() {
         const dollDiff = actual !== null && !isNaN(actual) ? actual - expected : null;
         return { expected, inflAdj, pctDiff, dollDiff };
       });
-      return { i, calYear, actual, caseVals };
+      return { i, calYear, age: startingAge + i + 1, actual, caseVals };
     }),
-    [years, projected, actuals]
+    [years, projected, actuals, startingAge]
   );
 
   const handleActual = (index, value) => {
@@ -119,6 +120,20 @@ export default function Advanced() {
                 step={1000}
                 onChange={(e) => setInitialValue(Number(e.target.value))}
               />
+            </div>
+          </div>
+          <div className="setting-group">
+            <label className="setting-label-text">Starting Age</label>
+            <div className="field-input">
+              <input
+                type="number"
+                value={startingAge}
+                min={1}
+                max={80}
+                step={1}
+                onChange={(e) => setStartingAge(Number(e.target.value))}
+              />
+              <span className="field-suffix">yrs</span>
             </div>
           </div>
           <div className="setting-group">
@@ -248,6 +263,7 @@ export default function Advanced() {
           <thead>
             <tr>
               <th rowSpan={2}>Year</th>
+              <th rowSpan={2}>Age</th>
               {cases.map((c, ci) => (
                 <th key={ci} colSpan={2} className="case-header">{c.label}</th>
               ))}
@@ -269,6 +285,7 @@ export default function Advanced() {
             {rows.map((row) => (
               <tr key={row.i}>
                 <td className="col-year">{row.calYear}</td>
+                <td className="muted">{row.age}</td>
                 {row.caseVals.map((cv, ci) => (
                   <>
                     <td key={`e-${ci}`}>{fmt$(cv.expected)}</td>
