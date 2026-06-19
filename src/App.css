@@ -550,6 +550,11 @@ body {
 .case-summary-value.indigo { color: #818cf8; }
 .case-summary-value.teal   { color: #2dd4bf; }
 
+.case-summary-sub {
+  font-size: 0.62rem;
+  color: #4b5563;
+}
+
 /* Table colspan headers */
 .case-header {
   text-align: center !important;
