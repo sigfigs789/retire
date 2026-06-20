@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
 
 const fmt$ = (v) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
@@ -68,6 +68,7 @@ export default function Advanced() {
   const [drawdownRate, setDrawdownRate] = useState(4);
   const [annualContribution, setAnnualContribution] = useState(24000);
   const [startingAge, setStartingAge] = useState(32);
+  const [showFullLifetime, setShowFullLifetime] = useState(false);
 
   const combinedSSMonthly = SS_LEVELS[selfSS].monthly + SS_LEVELS[spouseSS].monthly;
   const combinedSSAnnual = combinedSSMonthly * 12;
@@ -96,6 +97,41 @@ export default function Advanced() {
     }),
     [years, projected, actuals, startingAge]
   );
+
+  const POST_RETIREMENT_ARR = 0.05;
+  const POST_RETIREMENT_INFLATION = 0.03;
+
+  const chartData = useMemo(() => {
+    const accum = rows.map((row, i) => ({
+      age: row.age,
+      ...Object.fromEntries(cases.map((c, ci) => [c.label, Math.round(projected[ci]?.[i]?.expected ?? 0)])),
+      ...Object.fromEntries(cases.map((c, ci) => [`${c.label} Real`, Math.round(projected[ci]?.[i]?.inflAdj ?? 0)])),
+      ...(row.actual !== null ? { Actual: row.actual } : {}),
+    }));
+
+    const retirementAge = startingAge + years;
+    const retirementVals = cases.map((_, ci) => projected[ci]?.at(-1)?.expected ?? 0);
+    const withdrawals = cases.map((_, ci) => retirementVals[ci] * (drawdownRate / 100));
+    const values = [...retirementVals];
+    const inflFactors = cases.map((c) => Math.pow(1 + c.inflation / 100, years));
+    const drawdown = [];
+
+    for (let i = 1; retirementAge + i <= 100; i++) {
+      const point = { age: retirementAge + i };
+      let anyPositive = false;
+      cases.forEach((c, ci) => {
+        values[ci] = values[ci] * (1 + POST_RETIREMENT_ARR) - withdrawals[ci];
+        inflFactors[ci] *= (1 + POST_RETIREMENT_INFLATION);
+        point[c.label] = Math.max(0, Math.round(values[ci]));
+        point[`${c.label} Real`] = Math.max(0, Math.round(values[ci] / inflFactors[ci]));
+        if (values[ci] > 0) anyPositive = true;
+      });
+      drawdown.push(point);
+      if (!anyPositive) break;
+    }
+
+    return [...accum, ...drawdown];
+  }, [rows, cases, projected, drawdownRate, startingAge, years]);
 
   const handleActual = (index, value) => {
     setActuals((prev) => ({ ...prev, [index]: value }));
@@ -260,12 +296,12 @@ export default function Advanced() {
       </div>
 
       <div className="chart-wrap">
+        <div className="chart-toolbar">
+          <button className={`chart-toggle-btn${!showFullLifetime ? ' active' : ''}`} onClick={() => setShowFullLifetime(false)}>To Retirement</button>
+          <button className={`chart-toggle-btn${showFullLifetime ? ' active' : ''}`} onClick={() => setShowFullLifetime(true)}>To Age 100</button>
+        </div>
         <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={rows.map((row, i) => ({
-            age: row.age,
-            ...Object.fromEntries(cases.map((c, ci) => [c.label, Math.round(projected[ci]?.[i]?.expected ?? 0)])),
-            ...(row.actual !== null ? { Actual: row.actual } : {}),
-          }))} margin={{ top: 8, right: 16, left: 16, bottom: 0 }}>
+          <LineChart data={showFullLifetime ? chartData : chartData.filter(d => d.age <= startingAge + years)} margin={{ top: 8, right: 16, left: 16, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
             <XAxis dataKey="age" tick={{ fill: '#6b7280', fontSize: 11 }} tickLine={false} axisLine={false} />
             <YAxis tickFormatter={v => v >= 1e6 ? `$${(v/1e6).toFixed(1)}M` : `$${(v/1000).toFixed(0)}k`} tick={{ fill: '#6b7280', fontSize: 11 }} tickLine={false} axisLine={false} width={72} />
@@ -275,8 +311,12 @@ export default function Advanced() {
               formatter={(v, name) => [new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v), name]}
             />
             <Legend wrapperStyle={{ fontSize: '0.78rem', paddingTop: '0.75rem' }} />
+            <ReferenceLine x={startingAge + years} stroke="#6b7280" strokeDasharray="4 3" label={{ value: `Retirement (${POST_RETIREMENT_ARR * 100}% ARR post)`, position: 'insideTopRight', fill: '#6b7280', fontSize: 11 }} />
             {cases.map((c, ci) => (
               <Line key={ci} type="monotone" dataKey={c.label} stroke={['#818cf8','#2dd4bf','#34d399'][ci]} strokeWidth={2} dot={false} />
+            ))}
+            {cases.map((c, ci) => (
+              <Line key={`${ci}-real`} type="monotone" dataKey={`${c.label} Real`} stroke={['#818cf8','#2dd4bf','#34d399'][ci]} strokeWidth={1.5} dot={false} strokeDasharray="5 3" strokeOpacity={0.6} />
             ))}
             <Line type="monotone" dataKey="Actual" stroke="#fbbf24" strokeWidth={2} dot={{ r: 3, fill: '#fbbf24' }} connectNulls={false} />
           </LineChart>

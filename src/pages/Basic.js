@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
 
 const fmt$ = (v) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
@@ -69,6 +69,7 @@ export default function Basic() {
   const [drawdownRate, setDrawdownRate] = useState(4);
   const [annualContribution, setAnnualContribution] = useState(24000);
   const [startingAge, setStartingAge] = useState(32);
+  const [showFullLifetime, setShowFullLifetime] = useState(false);
 
   const rows = useMemo(() => {
     return Array.from({ length: years }, (_, i) => {
@@ -84,13 +85,43 @@ export default function Basic() {
       const dollDiff = actual !== null && !isNaN(actual) ? actual - expected : null;
       return { year, calYear, age: startingAge + year, expected, inflAdj, actual, pctDiff, dollDiff };
     });
-  }, [initialValue, years, arr, inflation, actuals, startingAge]);
+  }, [initialValue, years, arr, inflation, actuals, startingAge, annualContribution]);
 
   const finalExpected = rows.at(-1)?.expected ?? 0;
   const finalInflAdj = rows.at(-1)?.inflAdj ?? 0;
 
   const combinedSSMonthly = SS_LEVELS[selfSS].monthly + SS_LEVELS[spouseSS].monthly;
   const combinedSSAnnual = combinedSSMonthly * 12;
+
+  const POST_RETIREMENT_ARR = 0.05;
+  const POST_RETIREMENT_INFLATION = 0.03;
+
+  const chartData = useMemo(() => {
+    const accum = rows.map(r => ({
+      age: r.age,
+      Expected: Math.round(r.expected),
+      'Infl. Adjusted': Math.round(r.inflAdj),
+      ...(r.actual !== null ? { Actual: r.actual } : {}),
+    }));
+
+    const retirementAge = startingAge + years;
+    const withdrawal = finalExpected * (drawdownRate / 100);
+    let value = finalExpected;
+    let inflFactor = Math.pow(1 + inflation / 100, years);
+    const drawdown = [];
+    for (let i = 1; retirementAge + i <= 100; i++) {
+      value = value * (1 + POST_RETIREMENT_ARR) - withdrawal;
+      inflFactor *= (1 + POST_RETIREMENT_INFLATION);
+      drawdown.push({
+        age: retirementAge + i,
+        Expected: Math.max(0, Math.round(value)),
+        'Infl. Adjusted': Math.max(0, Math.round(value / inflFactor)),
+      });
+      if (value <= 0) break;
+    }
+
+    return [...accum, ...drawdown];
+  }, [rows, finalExpected, drawdownRate, inflation, startingAge, years]);
 
   const handleActual = (year, value) => {
     setActuals((prev) => ({ ...prev, [year]: value }));
@@ -192,13 +223,12 @@ export default function Basic() {
       </div>
 
       <div className="chart-wrap">
+        <div className="chart-toolbar">
+          <button className={`chart-toggle-btn${!showFullLifetime ? ' active' : ''}`} onClick={() => setShowFullLifetime(false)}>To Retirement</button>
+          <button className={`chart-toggle-btn${showFullLifetime ? ' active' : ''}`} onClick={() => setShowFullLifetime(true)}>To Age 100</button>
+        </div>
         <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={rows.map(r => ({
-            age: r.age,
-            Expected: Math.round(r.expected),
-            'Infl. Adjusted': Math.round(r.inflAdj),
-            ...(r.actual !== null ? { Actual: r.actual } : {}),
-          }))} margin={{ top: 8, right: 16, left: 16, bottom: 0 }}>
+          <LineChart data={showFullLifetime ? chartData : chartData.filter(d => d.age <= startingAge + years)} margin={{ top: 8, right: 16, left: 16, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
             <XAxis dataKey="age" tick={{ fill: '#6b7280', fontSize: 11 }} tickLine={false} axisLine={false} />
             <YAxis tickFormatter={v => v >= 1e6 ? `$${(v/1e6).toFixed(1)}M` : `$${(v/1000).toFixed(0)}k`} tick={{ fill: '#6b7280', fontSize: 11 }} tickLine={false} axisLine={false} width={72} />
@@ -208,6 +238,7 @@ export default function Basic() {
               formatter={(v, name) => [new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v), name]}
             />
             <Legend wrapperStyle={{ fontSize: '0.78rem', paddingTop: '0.75rem' }} />
+            <ReferenceLine x={startingAge + years} stroke="#6b7280" strokeDasharray="4 3" label={{ value: `Retirement (${POST_RETIREMENT_ARR * 100}% ARR post)`, position: 'insideTopRight', fill: '#6b7280', fontSize: 11 }} />
             <Line type="monotone" dataKey="Expected" stroke="#818cf8" strokeWidth={2} dot={false} />
             <Line type="monotone" dataKey="Infl. Adjusted" stroke="#2dd4bf" strokeWidth={2} dot={false} strokeDasharray="5 3" />
             <Line type="monotone" dataKey="Actual" stroke="#fbbf24" strokeWidth={2} dot={{ r: 3, fill: '#fbbf24' }} connectNulls={false} />
