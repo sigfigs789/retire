@@ -4,7 +4,7 @@ Retirement planning calculator built with React and Vite.
 
 ## Live Site
 
-https://retire-ii9p5ja4u-sigfigs789s-projects.vercel.app/
+https://retire-nu.vercel.app/
 
 ## Scripts
 
