@@ -68,7 +68,6 @@ export default function Basic() {
   const [spouseSS, setSpouseSS] = useState(3);
   const [drawdownRate, setDrawdownRate] = useState(4);
   const [annualContribution, setAnnualContribution] = useState(24000);
-  const [startingAge, setStartingAge] = useState(32);
   const [showFullLifetime, setShowFullLifetime] = useState(false);
 
   const rows = useMemo(() => {
@@ -83,9 +82,9 @@ export default function Basic() {
       const actual = rawActual !== undefined && rawActual !== '' ? parseFloat(rawActual) : null;
       const pctDiff = actual !== null && !isNaN(actual) ? ((actual - expected) / expected) * 100 : null;
       const dollDiff = actual !== null && !isNaN(actual) ? actual - expected : null;
-      return { year, calYear, age: startingAge + year, expected, inflAdj, actual, pctDiff, dollDiff };
+      return { year, calYear, expected, inflAdj, actual, pctDiff, dollDiff };
     });
-  }, [initialValue, years, arr, inflation, actuals, startingAge, annualContribution]);
+  }, [initialValue, years, arr, inflation, actuals, annualContribution]);
 
   const finalExpected = rows.at(-1)?.expected ?? 0;
   const finalInflAdj = rows.at(-1)?.inflAdj ?? 0;
@@ -95,25 +94,25 @@ export default function Basic() {
 
   const POST_RETIREMENT_ARR = 0.05;
   const POST_RETIREMENT_INFLATION = 0.03;
+  const POST_RETIREMENT_YEARS = 35;
 
   const chartData = useMemo(() => {
     const accum = rows.map(r => ({
-      age: r.age,
+      year: r.year,
       Expected: Math.round(r.expected),
       'Infl. Adjusted': Math.round(r.inflAdj),
       ...(r.actual !== null ? { Actual: r.actual } : {}),
     }));
 
-    const retirementAge = startingAge + years;
     const withdrawal = finalExpected * (drawdownRate / 100);
     let value = finalExpected;
     let inflFactor = Math.pow(1 + inflation / 100, years);
     const drawdown = [];
-    for (let i = 1; retirementAge + i <= 100; i++) {
+    for (let i = 1; i <= POST_RETIREMENT_YEARS; i++) {
       value = value * (1 + POST_RETIREMENT_ARR) - withdrawal;
       inflFactor *= (1 + POST_RETIREMENT_INFLATION);
       drawdown.push({
-        age: retirementAge + i,
+        year: years + i,
         Expected: Math.max(0, Math.round(value)),
         'Infl. Adjusted': Math.max(0, Math.round(value / inflFactor)),
       });
@@ -121,7 +120,7 @@ export default function Basic() {
     }
 
     return [...accum, ...drawdown];
-  }, [rows, finalExpected, drawdownRate, inflation, startingAge, years]);
+  }, [rows, finalExpected, drawdownRate, inflation, years]);
 
   const handleActual = (year, value) => {
     setActuals((prev) => ({ ...prev, [year]: value }));
@@ -149,7 +148,6 @@ export default function Basic() {
               />
             </div>
           </div>
-          <Field label="Starting Age" value={startingAge} onChange={setStartingAge} min={1} max={80} step={1} suffix="yrs" />
           <Field label="Years to Retirement" value={years} onChange={setYears} min={1} max={50} step={1} suffix="yrs" />
           <Field label="Annual Rate of Return" value={arr} onChange={setArr} min={0} max={20} step={0.1} suffix="%" />
           <Field label="Inflation Rate" value={inflation} onChange={setInflation} min={0} max={10} step={0.1} suffix="%" />
@@ -225,12 +223,12 @@ export default function Basic() {
       <div className="chart-wrap">
         <div className="chart-toolbar">
           <button className={`chart-toggle-btn${!showFullLifetime ? ' active' : ''}`} onClick={() => setShowFullLifetime(false)}>To Retirement</button>
-          <button className={`chart-toggle-btn${showFullLifetime ? ' active' : ''}`} onClick={() => setShowFullLifetime(true)}>To Age 100</button>
+          <button className={`chart-toggle-btn${showFullLifetime ? ' active' : ''}`} onClick={() => setShowFullLifetime(true)}>Full Lifetime</button>
         </div>
         <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={showFullLifetime ? chartData : chartData.filter(d => d.age <= startingAge + years)} margin={{ top: 8, right: 16, left: 16, bottom: 0 }}>
+          <LineChart data={showFullLifetime ? chartData : chartData.filter(d => d.year <= years)} margin={{ top: 8, right: 16, left: 16, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-            <XAxis dataKey="age" tick={{ fill: '#6b7280', fontSize: 11 }} tickLine={false} axisLine={false} />
+            <XAxis dataKey="year" tick={{ fill: '#6b7280', fontSize: 11 }} tickLine={false} axisLine={false} />
             <YAxis tickFormatter={v => v >= 1e6 ? `$${(v/1e6).toFixed(1)}M` : `$${(v/1000).toFixed(0)}k`} tick={{ fill: '#6b7280', fontSize: 11 }} tickLine={false} axisLine={false} width={72} />
             <Tooltip
               contentStyle={{ background: '#1f2937', border: '1px solid #374151', borderRadius: '0.5rem', fontSize: '0.8rem' }}
@@ -238,7 +236,7 @@ export default function Basic() {
               formatter={(v, name) => [new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v), name]}
             />
             <Legend wrapperStyle={{ fontSize: '0.78rem', paddingTop: '0.75rem' }} />
-            <ReferenceLine x={startingAge + years} stroke="#6b7280" strokeDasharray="4 3" label={{ value: `Retirement (${POST_RETIREMENT_ARR * 100}% ARR post)`, position: 'insideTopRight', fill: '#6b7280', fontSize: 11 }} />
+            <ReferenceLine x={years} stroke="#6b7280" strokeDasharray="4 3" label={{ value: `Retirement (${POST_RETIREMENT_ARR * 100}% ARR post)`, position: 'insideTopRight', fill: '#6b7280', fontSize: 11 }} />
             <Line type="monotone" dataKey="Expected" stroke="#818cf8" strokeWidth={2} dot={false} />
             <Line type="monotone" dataKey="Infl. Adjusted" stroke="#2dd4bf" strokeWidth={2} dot={false} strokeDasharray="5 3" />
             <Line type="monotone" dataKey="Actual" stroke="#fbbf24" strokeWidth={2} dot={{ r: 3, fill: '#fbbf24' }} connectNulls={false} />
@@ -251,7 +249,6 @@ export default function Basic() {
           <thead>
             <tr>
               <th>Year</th>
-              <th>Age</th>
               <th>Expected</th>
               <th>Infl. Adjusted</th>
               <th>Actual</th>
@@ -266,7 +263,6 @@ export default function Basic() {
               return (
                 <tr key={row.year} className={hasActual ? (positive ? 'row-positive' : 'row-negative') : ''}>
                   <td className="col-year">{row.calYear}</td>
-                  <td className="muted">{row.age}</td>
                   <td>{fmt$(row.expected)}</td>
                   <td className="muted">{fmt$(row.inflAdj)}</td>
                   <td>
