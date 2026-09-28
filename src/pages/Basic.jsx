@@ -147,12 +147,26 @@ export default function Basic() {
     return points;
   };
 
-  // `year` is years since Jan START_YEAR and can be fractional for check-ins.
+  // `year` is years since Jan START_YEAR, one point per month so hover snaps
+  // to months. Keys are k/12, the same as monthToT, so check-ins line up.
   const chartData = useMemo(() => {
     const byYear = new Map();
     const point = (year) => {
       if (!byYear.has(year)) byYear.set(year, { year });
       return byYear.get(year);
+    };
+    const eachMonth = (from, to, fn) => {
+      for (let k = Math.round(from * 12); k <= Math.round(to * 12); k++) fn(k / 12);
+    };
+    // Drawdown is simulated yearly; the months in between are interpolated.
+    const eachDrawdownMonth = (start, points, fn) => {
+      let prev = { year: years, ...start };
+      for (const p of points) {
+        for (let m = 1; m <= 12; m++) {
+          fn((prev.year * 12 + m) / 12, (k) => Math.round(prev[k] + ((p[k] - prev[k]) * m) / 12));
+        }
+        prev = p;
+      }
     };
     const plan = (year) => {
       const expected = projectValue(initialValue, year, arr, annualContribution);
@@ -162,28 +176,28 @@ export default function Basic() {
       });
     };
 
-    for (let year = 0; year <= years; year++) plan(year);
-    drawdownFrom(finalExpected).forEach((d) => Object.assign(point(d.year), { Expected: d.nominal, 'Infl. Adjusted': d.real }));
+    eachMonth(0, years, plan);
+    eachDrawdownMonth({ nominal: finalExpected, real: finalInflAdj }, drawdownFrom(finalExpected), (t, at) =>
+      Object.assign(point(t), { Expected: at('nominal'), 'Infl. Adjusted': at('real') })
+    );
 
     checkIns.forEach((c) => {
       const t = monthToT(c.month);
       if (t <= 0 || t > years) return;
-      plan(t);
       point(t)['Check-in'] = c.value;
     });
 
     // Every check-in gets its own re-projection; the line menu decides which show.
     validCheckIns.forEach((c) => {
-      point(c.t)[c.key] = c.value;
-      for (let year = Math.floor(c.t) + 1; year <= years; year++) {
-        point(year)[c.key] = Math.round(projectValue(c.value, year - c.t, arr, annualContribution));
-      }
+      eachMonth(c.t, years, (t) => {
+        point(t)[c.key] = Math.round(projectValue(c.value, t - c.t, arr, annualContribution));
+      });
       const atRetirement = projectValue(c.value, years - c.t, arr, annualContribution);
-      drawdownFrom(atRetirement).forEach((d) => { point(d.year)[c.key] = d.nominal; });
+      eachDrawdownMonth({ nominal: atRetirement }, drawdownFrom(atRetirement), (t, at) => { point(t)[c.key] = at('nominal'); });
     });
 
     return [...byYear.values()].sort((a, b) => a.year - b.year);
-  }, [rows, finalExpected, drawdownRate, inflation, years, initialValue, arr, annualContribution, checkIns, validCheckIns]);
+  }, [rows, finalExpected, finalInflAdj, drawdownRate, inflation, years, initialValue, arr, annualContribution, checkIns, validCheckIns]);
 
   const lineOptions = [
     { key: 'Expected', label: 'Original plan', color: '#818cf8' },
@@ -484,7 +498,7 @@ export default function Basic() {
               <Line type="monotone" dataKey="Check-in" stroke="#f59e0b" strokeWidth={0} dot={{ r: 5, fill: '#f59e0b', stroke: '#0c0c14', strokeWidth: 2 }} activeDot={{ r: 6 }} connectNulls isAnimationActive={false} legendType="circle" />
             )}
             {compareSnapshot && isVisible('Snapshot') && (
-              <Line type="monotone" dataKey="Snapshot" name={`Snapshot: ${snapshotLabel(compareSnapshot)}`} stroke="#f472b6" strokeWidth={2} dot={false} strokeDasharray="2 3" isAnimationActive={!zoom} />
+              <Line type="monotone" dataKey="Snapshot" name={`Snapshot: ${snapshotLabel(compareSnapshot)}`} stroke="#f472b6" strokeWidth={2} dot={false} strokeDasharray="2 3" connectNulls isAnimationActive={!zoom} />
             )}
             {drag && drag.start !== null && drag.start !== drag.end && (
               <ReferenceArea x1={drag.start} x2={drag.end} fill="#6366f1" fillOpacity={0.15} stroke="#6366f1" strokeOpacity={0.5} />
