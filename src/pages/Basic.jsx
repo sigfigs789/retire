@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, ReferenceArea } from 'recharts';
 import usePersistentState from '../usePersistentState';
 import SnapshotPanel, { snapshotLabel } from '../Snapshots';
 import CheckInPanel from '../CheckIns';
 import { START_YEAR, projectValue, monthToT, fmtMonthT } from '../projection';
 import LineMenu from '../LineMenu';
+import { fitYAxis, fitXAxis, fmtAxis$, fmtYearTick } from '../chartZoom';
 
 const fmt$ = (v) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
@@ -87,6 +88,9 @@ export default function Basic() {
   const originalLocked = checkIns.length > 0 && !originalUnlocked;
   // Only lines the user has toggled are stored; everything else uses its default.
   const [lineOverrides, setLineOverrides] = usePersistentState('retire.basic.lineOverrides', {});
+  // Zoomed x-range ({ left, right } in years since START_YEAR) and the in-progress drag.
+  const [zoom, setZoom] = useState(null);
+  const [drag, setDrag] = useState(null);
 
   const rows = useMemo(() => {
     return Array.from({ length: years }, (_, i) => {
@@ -112,24 +116,29 @@ export default function Basic() {
   const POST_RETIREMENT_INFLATION = 0.03;
   const POST_RETIREMENT_YEARS = 35;
 
-  // The latest check-in inside the accumulation window drives the re-projection:
-  // same rate and contributions, but starting from the real balance on that month.
-  const validCheckIns = useMemo(() =>
-    checkIns
+  // Each check-in re-projects from its real balance at the same rate. A check-in
+  // can change the annual contribution from that month on; later check-ins
+  // without one inherit the most recent change, else the main setting.
+  const validCheckIns = useMemo(() => {
+    let contribution = annualContribution;
+    return checkIns
       .map((c) => ({ ...c, t: monthToT(c.month), key: `Re-projected ${c.month}` }))
       .filter((c) => c.t > 0 && c.t < years)
-      .sort((a, b) => a.t - b.t),
-    [checkIns, years]
-  );
+      .sort((a, b) => a.t - b.t)
+      .map((c) => {
+        if (c.contribution != null) contribution = c.contribution;
+        return { ...c, effectiveContribution: contribution };
+      });
+  }, [checkIns, years, annualContribution]);
   const latestCheckIn = validCheckIns.at(-1) ?? null;
 
   const reprojectedAtRetirement = latestCheckIn
-    ? projectValue(latestCheckIn.value, years - latestCheckIn.t, arr, annualContribution)
+    ? projectValue(latestCheckIn.value, years - latestCheckIn.t, arr, latestCheckIn.effectiveContribution)
     : null;
 
   const reprojectedAtYear = (year) =>
     latestCheckIn && year >= latestCheckIn.t
-      ? projectValue(latestCheckIn.value, year - latestCheckIn.t, arr, annualContribution)
+      ? projectValue(latestCheckIn.value, year - latestCheckIn.t, arr, latestCheckIn.effectiveContribution)
       : null;
 
   // Withdrawal is fixed in real terms: it starts at drawdownRate% of the
@@ -179,9 +188,9 @@ export default function Basic() {
     validCheckIns.forEach((c) => {
       point(c.t)[c.key] = c.value;
       for (let year = Math.floor(c.t) + 1; year <= years; year++) {
-        point(year)[c.key] = Math.round(projectValue(c.value, year - c.t, arr, annualContribution));
+        point(year)[c.key] = Math.round(projectValue(c.value, year - c.t, arr, c.effectiveContribution));
       }
-      const atRetirement = projectValue(c.value, years - c.t, arr, annualContribution);
+      const atRetirement = projectValue(c.value, years - c.t, arr, c.effectiveContribution);
       drawdownFrom(atRetirement).forEach((d) => { point(d.year)[c.key] = d.nominal; });
     });
 
@@ -206,8 +215,8 @@ export default function Basic() {
   const isVisible = (key) => lineOverrides[key] ?? lineOptions.find((o) => o.key === key)?.defaultVisible ?? true;
   const toggleLine = (key) => setLineOverrides((prev) => ({ ...prev, [key]: !isVisible(key) }));
 
-  const addCheckIn = (month, value) => {
-    setCheckIns((prev) => [...prev.filter((c) => c.month !== month), { month, value }]);
+  const addCheckIn = (month, value, contribution) => {
+    setCheckIns((prev) => [...prev.filter((c) => c.month !== month), { month, value, contribution }]);
   };
 
   const deleteCheckIn = (month) => {
@@ -229,6 +238,33 @@ export default function Basic() {
       return snap ? { ...d, Snapshot: snap.expected } : d;
     });
   }, [chartData, showFullLifetime, years, compareSnapshot, snapshotByCalYear]);
+
+  const visibleKeys = lineOptions.map((o) => o.key).filter(isVisible);
+  const yAxisFit = zoom ? fitYAxis(displayChartData, visibleKeys, zoom.left, zoom.right) : null;
+  const xTicks = zoom ? fitXAxis(zoom.left, zoom.right) : undefined;
+
+  const labelOf = (e) => (e && e.activeLabel != null ? Number(e.activeLabel) : null);
+  // A press before the chart has seen any hover has no label yet, so the
+  // first move after it fills in the start.
+  const startDrag = (e) => {
+    const x = labelOf(e);
+    setDrag({ start: x, end: x });
+  };
+  const moveDrag = (e) => {
+    const x = labelOf(e);
+    if (drag && x !== null) setDrag((d) => ({ start: d.start ?? x, end: x }));
+  };
+  const endDrag = (e) => {
+    const end = labelOf(e) ?? drag?.end;
+    if (drag && drag.start !== null && end !== null && drag.start !== end) {
+      setZoom({ left: Math.min(drag.start, end), right: Math.max(drag.start, end) });
+    }
+    setDrag(null);
+  };
+  const setRange = (full) => {
+    setShowFullLifetime(full);
+    setZoom(null);
+  };
 
   const takeSnapshot = (note) => {
     const snapshot = {
@@ -341,6 +377,8 @@ export default function Basic() {
 
       <CheckInPanel
         checkIns={checkIns}
+        validCheckIns={validCheckIns}
+        annualContribution={annualContribution}
         years={years}
         planAt={(t) => projectValue(initialValue, t, arr, annualContribution)}
         latest={latestCheckIn}
@@ -390,15 +428,50 @@ export default function Basic() {
 
       <div className="chart-wrap">
         <div className="chart-toolbar">
-          <button className={`chart-toggle-btn${!showFullLifetime ? ' active' : ''}`} onClick={() => setShowFullLifetime(false)}>To Retirement</button>
-          <button className={`chart-toggle-btn${showFullLifetime ? ' active' : ''}`} onClick={() => setShowFullLifetime(true)}>Full Lifetime</button>
+          <button className={`chart-toggle-btn${!showFullLifetime ? ' active' : ''}`} onClick={() => setRange(false)}>To Retirement</button>
+          <button className={`chart-toggle-btn${showFullLifetime ? ' active' : ''}`} onClick={() => setRange(true)}>Full Lifetime</button>
+          {zoom ? (
+            <button className="chart-toggle-btn" onClick={() => setZoom(null)}>
+              Reset zoom ({fmtYearTick(zoom.left)} – {fmtYearTick(zoom.right)})
+            </button>
+          ) : (
+            <span className="chart-hint">Drag across the chart to zoom</span>
+          )}
           <LineMenu options={lineOptions} isVisible={isVisible} onToggle={toggleLine} />
         </div>
+        <div className={`chart-zoom${drag ? ' chart-zoom--dragging' : ''}`} onDoubleClick={() => setZoom(null)}>
         <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={displayChartData} margin={{ top: 8, right: 16, left: 16, bottom: 0 }}>
+          <LineChart
+            data={displayChartData}
+            margin={{ top: 8, right: 16, left: 16, bottom: 0 }}
+            onMouseDown={startDrag}
+            onMouseMove={moveDrag}
+            onMouseUp={endDrag}
+            onMouseLeave={endDrag}
+          >
             <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-            <XAxis dataKey="year" type="number" domain={['dataMin', 'dataMax']} allowDecimals={false} tickFormatter={(t) => START_YEAR + t} tick={{ fill: '#6b7280', fontSize: 11 }} tickLine={false} axisLine={false} />
-            <YAxis tickFormatter={v => v >= 1e6 ? `$${(v/1e6).toFixed(1)}M` : `$${(v/1000).toFixed(0)}k`} tick={{ fill: '#6b7280', fontSize: 11 }} tickLine={false} axisLine={false} width={72} />
+            <XAxis
+              dataKey="year"
+              type="number"
+              domain={zoom ? [zoom.left, zoom.right] : ['dataMin', 'dataMax']}
+              ticks={xTicks}
+              allowDataOverflow
+              allowDecimals={false}
+              tickFormatter={fmtYearTick}
+              tick={{ fill: '#6b7280', fontSize: 11 }}
+              tickLine={false}
+              axisLine={false}
+            />
+            <YAxis
+              domain={yAxisFit?.domain ?? ['auto', 'auto']}
+              ticks={yAxisFit?.ticks}
+              allowDataOverflow={!!yAxisFit}
+              tickFormatter={(v) => fmtAxis$(v, yAxisFit?.step)}
+              tick={{ fill: '#6b7280', fontSize: 11 }}
+              tickLine={false}
+              axisLine={false}
+              width={72}
+            />
             <Tooltip
               contentStyle={{ background: '#1f2937', border: '1px solid #374151', borderRadius: '0.5rem', fontSize: '0.8rem' }}
               labelStyle={{ color: '#9ca3af', marginBottom: '0.35rem' }}
@@ -435,8 +508,12 @@ export default function Basic() {
             {compareSnapshot && isVisible('Snapshot') && (
               <Line type="monotone" dataKey="Snapshot" name={`Snapshot: ${snapshotLabel(compareSnapshot)}`} stroke="#f472b6" strokeWidth={2} dot={false} strokeDasharray="2 3" />
             )}
+            {drag && drag.start !== null && drag.start !== drag.end && (
+              <ReferenceArea x1={drag.start} x2={drag.end} fill="#6366f1" fillOpacity={0.15} stroke="#6366f1" strokeOpacity={0.5} />
+            )}
           </LineChart>
         </ResponsiveContainer>
+        </div>
       </div>
 
       <div className="table-wrap">
