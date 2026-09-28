@@ -8,7 +8,6 @@ import LineMenu from '../LineMenu';
 const fmt$ = (v) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
 
-const fmtPct = (v) => `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`;
 
 // Older check-in re-projections cycle through these; the latest is always lime.
 const OLDER_REPROJECTION_COLORS = ['#fde047', '#fb923c', '#c084fc', '#38bdf8', '#f87171'];
@@ -70,7 +69,6 @@ export default function Basic() {
   const [years, setYears] = usePersistentState('retire.basic.years', 33);
   const [arr, setArr] = usePersistentState('retire.basic.arr', 7);
   const [inflation, setInflation] = usePersistentState('retire.basic.inflation', 2.5);
-  const [actuals, setActuals] = usePersistentState('retire.basic.actuals', {});
   const [selfSS, setSelfSS] = usePersistentState('retire.basic.selfSS', 3);
   const [spouseSS, setSpouseSS] = usePersistentState('retire.basic.spouseSS', 3);
   const [drawdownRate, setDrawdownRate] = usePersistentState('retire.basic.drawdownRate', 4);
@@ -90,13 +88,9 @@ export default function Basic() {
       const calYear = START_YEAR + i;
       const expected = projectValue(initialValue, year, arr, annualContribution);
       const inflAdj = expected / Math.pow(1 + inflation / 100, year);
-      const rawActual = actuals[year];
-      const actual = rawActual !== undefined && rawActual !== '' ? parseFloat(rawActual) : null;
-      const pctDiff = actual !== null && !isNaN(actual) ? ((actual - expected) / expected) * 100 : null;
-      const dollDiff = actual !== null && !isNaN(actual) ? actual - expected : null;
-      return { year, calYear, expected, inflAdj, actual, pctDiff, dollDiff };
+      return { year, calYear, expected, inflAdj };
     });
-  }, [initialValue, years, arr, inflation, actuals, annualContribution]);
+  }, [initialValue, years, arr, inflation, annualContribution]);
 
   const finalExpected = rows.at(-1)?.expected ?? 0;
   const finalInflAdj = rows.at(-1)?.inflAdj ?? 0;
@@ -166,7 +160,6 @@ export default function Basic() {
     };
 
     for (let year = 0; year <= years; year++) plan(year);
-    rows.forEach((r) => { if (r.actual !== null) point(r.year).Actual = r.actual; });
     drawdownFrom(finalExpected).forEach((d) => Object.assign(point(d.year), { Expected: d.nominal, 'Infl. Adjusted': d.real }));
 
     checkIns.forEach((c) => {
@@ -189,11 +182,9 @@ export default function Basic() {
     return [...byYear.values()].sort((a, b) => a.year - b.year);
   }, [rows, finalExpected, drawdownRate, inflation, years, initialValue, arr, annualContribution, checkIns, validCheckIns]);
 
-  const hasActuals = rows.some((r) => r.actual !== null);
   const lineOptions = [
     { key: 'Expected', label: 'Original plan', color: '#818cf8' },
     { key: 'Infl. Adjusted', label: 'Original plan (inflation-adjusted)', color: '#2dd4bf' },
-    ...(hasActuals ? [{ key: 'Actual', label: 'Actual (yearly)', color: '#fbbf24' }] : []),
     ...(checkIns.length > 0 ? [{ key: 'Check-in', label: 'Check-in points', color: '#f59e0b' }] : []),
     ...[...validCheckIns].reverse().map((c, i) => ({
       key: c.key,
@@ -218,10 +209,6 @@ export default function Basic() {
     () => (showFullLifetime ? chartData : chartData.filter(d => d.year <= years)),
     [chartData, showFullLifetime, years]
   );
-
-  const handleActual = (year, value) => {
-    setActuals((prev) => ({ ...prev, [year]: value }));
-  };
 
   return (
     <div className="page">
@@ -362,9 +349,6 @@ export default function Basic() {
             {isVisible('Infl. Adjusted') && (
               <Line type="monotone" dataKey="Infl. Adjusted" stroke="#2dd4bf" strokeWidth={2} dot={false} strokeDasharray="5 3" connectNulls />
             )}
-            {hasActuals && isVisible('Actual') && (
-              <Line type="monotone" dataKey="Actual" stroke="#fbbf24" strokeWidth={2} dot={{ r: 3, fill: '#fbbf24' }} connectNulls />
-            )}
             {validCheckIns.filter((c) => isVisible(c.key)).map((c) => (
               <Line
                 key={c.key}
@@ -393,51 +377,20 @@ export default function Basic() {
               <th>Expected</th>
               <th>Infl. Adjusted</th>
               {latestCheckIn && <th>Re-projected</th>}
-              <th>Actual</th>
-              <th>$ vs Expected</th>
-              <th>% vs Expected</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => {
-              const hasActual = row.pctDiff !== null;
-              const positive = hasActual && row.pctDiff >= 0;
-              return (
-                <tr key={row.year} className={hasActual ? (positive ? 'row-positive' : 'row-negative') : ''}>
-                  <td className="col-year">{row.calYear}</td>
-                  <td>{fmt$(row.expected)}</td>
-                  <td className="muted">{fmt$(row.inflAdj)}</td>
-                  {latestCheckIn && (() => {
-                    const re = reprojectedAtYear(row.year);
-                    return <td className={re === null ? 'muted' : ''} style={re !== null ? { color: '#a3e635' } : undefined}>{re === null ? '—' : fmt$(re)}</td>;
-                  })()}
-                  <td>
-                    <div className="actual-wrap">
-                      <span className="actual-dollar">$</span>
-                      <input
-                        type="number"
-                        className="actual-input"
-                        placeholder="—"
-                        value={actuals[row.year] ?? ''}
-                        onChange={(e) => handleActual(row.year, e.target.value)}
-                      />
-                    </div>
-                  </td>
-                  <td className={hasActual ? (positive ? 'positive' : 'negative') : 'muted'}>
-                    {hasActual ? fmt$(row.dollDiff) : '—'}
-                  </td>
-                  <td>
-                    {hasActual ? (
-                      <span className={`badge ${positive ? 'badge-green' : 'badge-red'}`}>
-                        {fmtPct(row.pctDiff)}
-                      </span>
-                    ) : (
-                      <span className="muted">—</span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
+            {rows.map((row) => (
+              <tr key={row.year}>
+                <td className="col-year">{row.calYear}</td>
+                <td>{fmt$(row.expected)}</td>
+                <td className="muted">{fmt$(row.inflAdj)}</td>
+                {latestCheckIn && (() => {
+                  const re = reprojectedAtYear(row.year);
+                  return <td className={re === null ? 'muted' : ''} style={re !== null ? { color: '#a3e635' } : undefined}>{re === null ? '—' : fmt$(re)}</td>;
+                })()}
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
