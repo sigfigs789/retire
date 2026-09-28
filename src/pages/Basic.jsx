@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
 import usePersistentState from '../usePersistentState';
-import SnapshotPanel, { snapshotLabel } from '../Snapshots';
 import CheckInPanel from '../CheckIns';
 import { START_YEAR, projectValue, monthToT, fmtMonthT } from '../projection';
 import LineMenu from '../LineMenu';
@@ -75,9 +74,6 @@ export default function Basic() {
   const [drawdownRate, setDrawdownRate] = usePersistentState('retire.basic.drawdownRate', 4);
   const [annualContribution, setAnnualContribution] = usePersistentState('retire.basic.annualContribution', 24000);
   const [showFullLifetime, setShowFullLifetime] = usePersistentState('retire.basic.showFullLifetime', false);
-  const [snapshots, setSnapshots] = usePersistentState('retire.basic.snapshots', []);
-  const [compareId, setCompareId] = usePersistentState('retire.basic.compareSnapshotId', null);
-  const compareSnapshot = snapshots.find((s) => s.id === compareId) ?? null;
   const [checkIns, setCheckIns] = usePersistentState('retire.basic.checkIns', []);
   // The Jan START_YEAR value anchors the original plan, so once check-ins exist
   // it's locked; new balances go in as check-ins instead of overwriting it.
@@ -106,24 +102,29 @@ export default function Basic() {
   const POST_RETIREMENT_INFLATION = 0.03;
   const POST_RETIREMENT_YEARS = 35;
 
-  // The latest check-in inside the accumulation window drives the re-projection:
-  // same rate and contributions, but starting from the real balance on that month.
-  const validCheckIns = useMemo(() =>
-    checkIns
+  // Each check-in re-projects from its real balance at the same rate. A check-in
+  // can change the annual contribution from that month on; later check-ins
+  // without one inherit the most recent change, else the main setting.
+  const validCheckIns = useMemo(() => {
+    let contribution = annualContribution;
+    return checkIns
       .map((c) => ({ ...c, t: monthToT(c.month), key: `Re-projected ${c.month}` }))
       .filter((c) => c.t > 0 && c.t < years)
-      .sort((a, b) => a.t - b.t),
-    [checkIns, years]
-  );
+      .sort((a, b) => a.t - b.t)
+      .map((c) => {
+        if (c.contribution != null) contribution = c.contribution;
+        return { ...c, effectiveContribution: contribution };
+      });
+  }, [checkIns, years, annualContribution]);
   const latestCheckIn = validCheckIns.at(-1) ?? null;
 
   const reprojectedAtRetirement = latestCheckIn
-    ? projectValue(latestCheckIn.value, years - latestCheckIn.t, arr, annualContribution)
+    ? projectValue(latestCheckIn.value, years - latestCheckIn.t, arr, latestCheckIn.effectiveContribution)
     : null;
 
   const reprojectedAtYear = (year) =>
     latestCheckIn && year >= latestCheckIn.t
-      ? projectValue(latestCheckIn.value, year - latestCheckIn.t, arr, annualContribution)
+      ? projectValue(latestCheckIn.value, year - latestCheckIn.t, arr, latestCheckIn.effectiveContribution)
       : null;
 
   // Withdrawal is fixed in real terms: it starts at drawdownRate% of the
@@ -172,9 +173,9 @@ export default function Basic() {
     validCheckIns.forEach((c) => {
       point(c.t)[c.key] = c.value;
       for (let year = Math.floor(c.t) + 1; year <= years; year++) {
-        point(year)[c.key] = Math.round(projectValue(c.value, year - c.t, arr, annualContribution));
+        point(year)[c.key] = Math.round(projectValue(c.value, year - c.t, arr, c.effectiveContribution));
       }
-      const atRetirement = projectValue(c.value, years - c.t, arr, annualContribution);
+      const atRetirement = projectValue(c.value, years - c.t, arr, c.effectiveContribution);
       drawdownFrom(atRetirement).forEach((d) => { point(d.year)[c.key] = d.nominal; });
     });
 
@@ -191,67 +192,23 @@ export default function Basic() {
       color: c === latestCheckIn ? '#a3e635' : OLDER_REPROJECTION_COLORS[(i - 1) % OLDER_REPROJECTION_COLORS.length],
       defaultVisible: c === latestCheckIn,
     })),
-    ...(compareSnapshot ? [{ key: 'Snapshot', label: `Snapshot: ${snapshotLabel(compareSnapshot)}`, color: '#f472b6' }] : []),
   ];
   const lineColor = Object.fromEntries(lineOptions.map((o) => [o.key, o.color]));
   const isVisible = (key) => lineOverrides[key] ?? lineOptions.find((o) => o.key === key)?.defaultVisible ?? true;
   const toggleLine = (key) => setLineOverrides((prev) => ({ ...prev, [key]: !isVisible(key) }));
 
-  const addCheckIn = (month, value) => {
-    setCheckIns((prev) => [...prev.filter((c) => c.month !== month), { month, value }]);
+  const addCheckIn = (month, value, contribution) => {
+    setCheckIns((prev) => [...prev.filter((c) => c.month !== month), { month, value, contribution }]);
   };
 
   const deleteCheckIn = (month) => {
     setCheckIns((prev) => prev.filter((c) => c.month !== month));
   };
 
-  // Snapshot series are keyed by calendar year so a plan saved in an earlier
-  // year still lines up with today's projection.
-  const snapshotByCalYear = useMemo(
-    () => new Map((compareSnapshot?.series ?? []).map((p) => [p.calYear, p])),
-    [compareSnapshot]
+  const displayChartData = useMemo(
+    () => (showFullLifetime ? chartData : chartData.filter(d => d.year <= years)),
+    [chartData, showFullLifetime, years]
   );
-
-  const displayChartData = useMemo(() => {
-    const visible = showFullLifetime ? chartData : chartData.filter(d => d.year <= years);
-    if (!compareSnapshot) return visible;
-    return visible.map((d) => {
-      const snap = Number.isInteger(d.year) ? snapshotByCalYear.get(START_YEAR + d.year - 1) : null;
-      return snap ? { ...d, Snapshot: snap.expected } : d;
-    });
-  }, [chartData, showFullLifetime, years, compareSnapshot, snapshotByCalYear]);
-
-  const takeSnapshot = (note) => {
-    const snapshot = {
-      id: Date.now().toString(36),
-      takenAt: new Date().toISOString(),
-      note,
-      inputs: { initialValue, years, arr, inflation, annualContribution, selfSS, spouseSS, drawdownRate },
-      series: chartData
-        .filter((d) => Number.isInteger(d.year) && d.year >= 1)
-        .map((d) => ({ calYear: START_YEAR + d.year - 1, expected: d.Expected, inflAdj: d['Infl. Adjusted'] })),
-      finalExpected,
-      finalInflAdj,
-      retirementYear: START_YEAR + years - 1,
-    };
-    setSnapshots((prev) => [snapshot, ...prev]);
-  };
-
-  const restoreSnapshot = ({ inputs }) => {
-    setInitialValue(inputs.initialValue);
-    setYears(inputs.years);
-    setArr(inputs.arr);
-    setInflation(inputs.inflation);
-    setAnnualContribution(inputs.annualContribution);
-    setSelfSS(inputs.selfSS);
-    setSpouseSS(inputs.spouseSS);
-    setDrawdownRate(inputs.drawdownRate);
-  };
-
-  const deleteSnapshot = (id) => {
-    setSnapshots((prev) => prev.filter((s) => s.id !== id));
-    if (id === compareId) setCompareId(null);
-  };
 
   return (
     <div className="page">
@@ -328,6 +285,8 @@ export default function Basic() {
 
       <CheckInPanel
         checkIns={checkIns}
+        validCheckIns={validCheckIns}
+        annualContribution={annualContribution}
         years={years}
         planAt={(t) => projectValue(initialValue, t, arr, annualContribution)}
         latest={latestCheckIn}
@@ -335,16 +294,6 @@ export default function Basic() {
         planAtRetirement={finalExpected}
         onAdd={addCheckIn}
         onDelete={deleteCheckIn}
-      />
-
-      <SnapshotPanel
-        snapshots={snapshots}
-        selected={compareSnapshot}
-        current={{ initialValue, finalExpected, finalInflAdj }}
-        onTake={takeSnapshot}
-        onSelect={setCompareId}
-        onRestore={restoreSnapshot}
-        onDelete={deleteSnapshot}
       />
 
       <div className="summary-row" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
@@ -416,9 +365,6 @@ export default function Basic() {
             {checkIns.length > 0 && isVisible('Check-in') && (
               <Line type="monotone" dataKey="Check-in" stroke="#f59e0b" strokeWidth={0} dot={{ r: 5, fill: '#f59e0b', stroke: '#0c0c14', strokeWidth: 2 }} activeDot={{ r: 6 }} connectNulls isAnimationActive={false} legendType="circle" />
             )}
-            {compareSnapshot && isVisible('Snapshot') && (
-              <Line type="monotone" dataKey="Snapshot" name={`Snapshot: ${snapshotLabel(compareSnapshot)}`} stroke="#f472b6" strokeWidth={2} dot={false} strokeDasharray="2 3" />
-            )}
           </LineChart>
         </ResponsiveContainer>
       </div>
@@ -431,8 +377,6 @@ export default function Basic() {
               <th>Expected</th>
               <th>Infl. Adjusted</th>
               {latestCheckIn && <th>Re-projected</th>}
-              {compareSnapshot && <th>Snapshot</th>}
-              {compareSnapshot && <th>Now vs Snapshot</th>}
             </tr>
           </thead>
           <tbody>
@@ -444,17 +388,6 @@ export default function Basic() {
                 {latestCheckIn && (() => {
                   const re = reprojectedAtYear(row.year);
                   return <td className={re === null ? 'muted' : ''} style={re !== null ? { color: '#a3e635' } : undefined}>{re === null ? '—' : fmt$(re)}</td>;
-                })()}
-                {compareSnapshot && (() => {
-                  const snap = snapshotByCalYear.get(row.calYear);
-                  if (!snap) return <><td className="muted">—</td><td className="muted">—</td></>;
-                  const diff = row.expected - snap.expected;
-                  return (
-                    <>
-                      <td className="muted">{fmt$(snap.expected)}</td>
-                      <td className={diff >= 0 ? 'positive' : 'negative'}>{diff >= 0 ? '+' : ''}{fmt$(diff)}</td>
-                    </>
-                  );
                 })()}
               </tr>
             ))}
