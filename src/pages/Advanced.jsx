@@ -111,6 +111,8 @@ export default function Advanced() {
     }));
 
     const retirementVals = cases.map((_, ci) => projected[ci]?.at(-1)?.expected ?? 0);
+    // Withdrawals are fixed in real terms: each starts at drawdownRate% of the
+    // retirement balance and grows with inflation each year after that.
     const withdrawals = cases.map((_, ci) => retirementVals[ci] * (drawdownRate / 100));
     const values = [...retirementVals];
     const inflFactors = cases.map((c) => Math.pow(1 + c.inflation / 100, years));
@@ -121,6 +123,7 @@ export default function Advanced() {
       let anyPositive = false;
       cases.forEach((c, ci) => {
         values[ci] = values[ci] * (1 + POST_RETIREMENT_ARR) - withdrawals[ci];
+        withdrawals[ci] *= (1 + POST_RETIREMENT_INFLATION);
         inflFactors[ci] *= (1 + POST_RETIREMENT_INFLATION);
         point[c.label] = Math.max(0, Math.round(values[ci]));
         point[`${c.label} Real`] = Math.max(0, Math.round(values[ci] / inflFactors[ci]));
@@ -269,11 +272,11 @@ export default function Advanced() {
                   <span className="case-summary-value teal">{fmt$(projected[ci]?.at(-1)?.inflAdj ?? 0)}</span>
                 </div>
                 <div className="case-summary-item">
-                  <span className="case-summary-label">Expected Income/yr</span>
+                  <span className="case-summary-label">Expected Income/yr (Today's $)</span>
                   <span className="case-summary-value" style={{ color: '#34d399' }}>
-                    {fmt$((projected[ci]?.at(-1)?.expected ?? 0) * (drawdownRate / 100) + combinedSSAnnual)}
+                    {fmt$((projected[ci]?.at(-1)?.inflAdj ?? 0) * (drawdownRate / 100) + combinedSSAnnual)}
                   </span>
-                  <span className="case-summary-sub">{drawdownRate}% rule + SS</span>
+                  <span className="case-summary-sub">{drawdownRate}% rule + SS, inflation-adjusted</span>
                 </div>
               </div>
             </div>
