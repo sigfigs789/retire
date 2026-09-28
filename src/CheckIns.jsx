@@ -46,16 +46,16 @@ export default function CheckInPanel({ checkIns, validCheckIns, annualContributi
   const sorted = [...checkIns].sort((a, b) => b.month.localeCompare(a.month));
 
   return (
-    <div className="snapshot-panel">
-      <div className="snapshot-header">
+    <div className="panel-panel">
+      <div className="panel-header">
         <div>
           <span className="setting-label-text">Check-ins</span>
-          <p className="snapshot-hint">Enter your actual balance for a month to re-project from there.</p>
+          <p className="panel-hint">Enter your actual balance for a month to re-project from there.</p>
         </div>
-        <div className="snapshot-take">
+        <div className="panel-take">
           <input
             type="month"
-            className="snapshot-note-input"
+            className="panel-note-input"
             aria-label="Check-in month"
             min={minMonth}
             max={maxMonth}
@@ -64,7 +64,7 @@ export default function CheckInPanel({ checkIns, validCheckIns, annualContributi
           />
           <input
             type="number"
-            className="snapshot-note-input"
+            className="panel-note-input"
             aria-label="Check-in balance"
             placeholder="Balance ($)"
             min={0}
@@ -75,7 +75,7 @@ export default function CheckInPanel({ checkIns, validCheckIns, annualContributi
           />
           <input
             type="number"
-            className="snapshot-note-input"
+            className="panel-note-input"
             aria-label="New annual contribution (optional)"
             title="Optional. Applies from this month on; blank keeps the current contribution."
             placeholder={`Contribution/yr (${fmt$(inheritedContribution)})`}
@@ -85,21 +85,21 @@ export default function CheckInPanel({ checkIns, validCheckIns, annualContributi
             onChange={(e) => setContribution(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && add()}
           />
-          <button className="snapshot-btn snapshot-btn--primary" onClick={add} disabled={!canAdd}>Add check-in</button>
+          <button className="panel-btn panel-btn--primary" onClick={add} disabled={!canAdd}>Add check-in</button>
         </div>
       </div>
 
       {sorted.length > 0 && (
-        <ul className="snapshot-list">
+        <ul className="panel-list">
           {sorted.map((c) => {
             const ct = monthToT(c.month);
             const valid = ct > 0 && ct < years;
             const isLatest = latest?.month === c.month;
             return (
-              <li key={c.month} className={`snapshot-item${isLatest ? ' snapshot-item--latest' : ''}`}>
-                <div className="snapshot-meta">
-                  <span className="snapshot-name">{fmtMonthT(ct)}: {fmt$(c.value)}{isLatest && <span className="snapshot-tag">Latest</span>}</span>
-                  <span className="snapshot-sub">
+              <li key={c.month} className={`panel-item${isLatest ? ' panel-item--latest' : ''}`}>
+                <div className="panel-meta">
+                  <span className="panel-name">{fmtMonthT(ct)}: {fmt$(c.value)}{isLatest && <span className="panel-tag">Latest</span>}</span>
+                  <span className="panel-sub">
                     {valid
                       ? <>
                           Plan expected {fmt$(planAt(ct))} · <Delta now={c.value} then={planAt(ct)} />
@@ -111,8 +111,8 @@ export default function CheckInPanel({ checkIns, validCheckIns, annualContributi
                       : 'Outside the plan window'}
                   </span>
                 </div>
-                <div className="snapshot-actions">
-                  <button className="snapshot-btn" onClick={() => onDelete(c.month)}>Delete</button>
+                <div className="panel-actions">
+                  <button className="panel-btn" onClick={() => onDelete(c.month)}>Delete</button>
                 </div>
               </li>
             );
@@ -121,18 +121,18 @@ export default function CheckInPanel({ checkIns, validCheckIns, annualContributi
       )}
 
       {latest && (
-        <div className="snapshot-compare">
-          <div className="snapshot-compare-item">
+        <div className="panel-compare">
+          <div className="panel-compare-item">
             <span className="summary-label">Re-projected at Retirement</span>
-            <span className="snapshot-compare-value" style={{ color: '#a3e635' }}>{fmt$(reprojectedAtRetirement)}</span>
+            <span className="panel-compare-value" style={{ color: '#a3e635' }}>{fmt$(reprojectedAtRetirement)}</span>
             <span className="muted">From {fmtMonthT(latest.t)} check-in</span>
           </div>
-          <div className="snapshot-compare-item">
+          <div className="panel-compare-item">
             <span className="summary-label">Original Plan at Retirement</span>
-            <span className="snapshot-compare-value" style={{ color: '#818cf8' }}>{fmt$(planAtRetirement)}</span>
+            <span className="panel-compare-value" style={{ color: '#818cf8' }}>{fmt$(planAtRetirement)}</span>
             <span className="muted">From Jan {tToMonth(0).slice(0, 4)} value</span>
           </div>
-          <div className="snapshot-compare-item">
+          <div className="panel-compare-item">
             <span className="summary-label">Difference</span>
             <Delta now={reprojectedAtRetirement} then={planAtRetirement} />
           </div>
