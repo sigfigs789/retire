@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
+import usePersistentState from '../usePersistentState';
 
 const fmt$ = (v) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
@@ -59,15 +60,15 @@ function computeExpected(initialValue, years, arr, inflation, annualContribution
 }
 
 export default function Advanced() {
-  const [initialValue, setInitialValue] = useState(201252);
-  const [years, setYears] = useState(33);
-  const [cases, setCases] = useState(DEFAULT_CASES);
-  const [actuals, setActuals] = useState({});
-  const [selfSS, setSelfSS] = useState(3);
-  const [spouseSS, setSpouseSS] = useState(3);
-  const [drawdownRate, setDrawdownRate] = useState(4);
-  const [annualContribution, setAnnualContribution] = useState(24000);
-  const [showFullLifetime, setShowFullLifetime] = useState(false);
+  const [initialValue, setInitialValue] = usePersistentState('retire.advanced.initialValue', 201252);
+  const [years, setYears] = usePersistentState('retire.advanced.years', 33);
+  const [cases, setCases] = usePersistentState('retire.advanced.cases', DEFAULT_CASES);
+  const [actuals, setActuals] = usePersistentState('retire.advanced.actuals', {});
+  const [selfSS, setSelfSS] = usePersistentState('retire.advanced.selfSS', 3);
+  const [spouseSS, setSpouseSS] = usePersistentState('retire.advanced.spouseSS', 3);
+  const [drawdownRate, setDrawdownRate] = usePersistentState('retire.advanced.drawdownRate', 4);
+  const [annualContribution, setAnnualContribution] = usePersistentState('retire.advanced.annualContribution', 24000);
+  const [showFullLifetime, setShowFullLifetime] = usePersistentState('retire.advanced.showFullLifetime', false);
 
   const combinedSSMonthly = SS_LEVELS[selfSS].monthly + SS_LEVELS[spouseSS].monthly;
   const combinedSSAnnual = combinedSSMonthly * 12;

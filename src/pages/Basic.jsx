@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
+import usePersistentState from '../usePersistentState';
 
 const fmt$ = (v) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
@@ -59,16 +60,16 @@ function SSSlider({ label, value, onChange }) {
 }
 
 export default function Basic() {
-  const [initialValue, setInitialValue] = useState(201252);
-  const [years, setYears] = useState(33);
-  const [arr, setArr] = useState(7);
-  const [inflation, setInflation] = useState(2.5);
-  const [actuals, setActuals] = useState({});
-  const [selfSS, setSelfSS] = useState(3);
-  const [spouseSS, setSpouseSS] = useState(3);
-  const [drawdownRate, setDrawdownRate] = useState(4);
-  const [annualContribution, setAnnualContribution] = useState(24000);
-  const [showFullLifetime, setShowFullLifetime] = useState(false);
+  const [initialValue, setInitialValue] = usePersistentState('retire.basic.initialValue', 201252);
+  const [years, setYears] = usePersistentState('retire.basic.years', 33);
+  const [arr, setArr] = usePersistentState('retire.basic.arr', 7);
+  const [inflation, setInflation] = usePersistentState('retire.basic.inflation', 2.5);
+  const [actuals, setActuals] = usePersistentState('retire.basic.actuals', {});
+  const [selfSS, setSelfSS] = usePersistentState('retire.basic.selfSS', 3);
+  const [spouseSS, setSpouseSS] = usePersistentState('retire.basic.spouseSS', 3);
+  const [drawdownRate, setDrawdownRate] = usePersistentState('retire.basic.drawdownRate', 4);
+  const [annualContribution, setAnnualContribution] = usePersistentState('retire.basic.annualContribution', 24000);
+  const [showFullLifetime, setShowFullLifetime] = usePersistentState('retire.basic.showFullLifetime', false);
 
   const rows = useMemo(() => {
     return Array.from({ length: years }, (_, i) => {
