@@ -644,3 +644,40 @@ body {
   border-radius: 2px;
   flex-shrink: 0;
 }
+
+/* Playground */
+.nav-link {
+  color: #9ca3af;
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+
+.nav-link:hover {
+  color: #d1d5db;
+}
+
+.nav-link.active {
+  color: #f1f5f9;
+}
+
+.playground-sliders {
+  grid-template-columns: repeat(3, 1fr);
+  row-gap: 1.5rem;
+}
+
+.playground-summary {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+@media (max-width: 800px) {
+  .playground-sliders {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .playground-sliders,
+  .playground-summary {
+    grid-template-columns: 1fr;
+  }
+}
