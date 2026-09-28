@@ -105,12 +105,15 @@ export default function Basic() {
       ...(r.actual !== null ? { Actual: r.actual } : {}),
     }));
 
-    const withdrawal = finalExpected * (drawdownRate / 100);
+    // Withdrawal is fixed in real terms: it starts at drawdownRate% of the
+    // retirement balance and grows with inflation each year after that.
+    let withdrawal = finalExpected * (drawdownRate / 100);
     let value = finalExpected;
     let inflFactor = Math.pow(1 + inflation / 100, years);
     const drawdown = [];
     for (let i = 1; i <= POST_RETIREMENT_YEARS; i++) {
       value = value * (1 + POST_RETIREMENT_ARR) - withdrawal;
+      withdrawal *= (1 + POST_RETIREMENT_INFLATION);
       inflFactor *= (1 + POST_RETIREMENT_INFLATION);
       drawdown.push({
         year: years + i,
@@ -215,9 +218,9 @@ export default function Basic() {
           <span className="summary-sub">{combinedSSMonthly > 0 ? `${fmt$(combinedSSMonthly)}/mo combined` : 'No SS benefit selected'}</span>
         </div>
         <div className="summary-card">
-          <span className="summary-label">Expected Annual Income</span>
-          <span className="summary-value" style={{ color: '#34d399' }}>{fmt$(finalExpected * (drawdownRate / 100) + combinedSSAnnual)}</span>
-          <span className="summary-sub">{drawdownRate}% rule + SS ({fmt$(finalExpected * (drawdownRate / 100) / 12)}/mo stocks)</span>
+          <span className="summary-label">Expected Annual Income (Today's $)</span>
+          <span className="summary-value" style={{ color: '#34d399' }}>{fmt$(finalInflAdj * (drawdownRate / 100) + combinedSSAnnual)}</span>
+          <span className="summary-sub">{drawdownRate}% rule + SS ({fmt$(finalInflAdj * (drawdownRate / 100) / 12)}/mo stocks), inflation-adjusted</span>
         </div>
       </div>
 
