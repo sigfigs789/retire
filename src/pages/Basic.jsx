@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, ReferenceArea } from 'recharts';
 import usePersistentState from '../usePersistentState';
 import SnapshotPanel, { snapshotLabel } from '../Snapshots';
 import CheckInPanel from '../CheckIns';
 import { START_YEAR, projectValue, monthToT, fmtMonthT } from '../projection';
 import LineMenu from '../LineMenu';
+import { fitYAxis, fitXAxis, fmtAxis$, fmtYearTick } from '../chartZoom';
 
 const fmt$ = (v) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
@@ -85,6 +86,9 @@ export default function Basic() {
   const originalLocked = checkIns.length > 0 && !originalUnlocked;
   // Only lines the user has toggled are stored; everything else uses its default.
   const [lineOverrides, setLineOverrides] = usePersistentState('retire.basic.lineOverrides', {});
+  // Zoomed x-range ({ left, right } in years since START_YEAR) and the in-progress drag.
+  const [zoom, setZoom] = useState(null);
+  const [drag, setDrag] = useState(null);
 
   const rows = useMemo(() => {
     return Array.from({ length: years }, (_, i) => {
@@ -220,6 +224,33 @@ export default function Basic() {
       return snap ? { ...d, Snapshot: snap.expected } : d;
     });
   }, [chartData, showFullLifetime, years, compareSnapshot, snapshotByCalYear]);
+
+  const visibleKeys = lineOptions.map((o) => o.key).filter(isVisible);
+  const yAxisFit = zoom ? fitYAxis(displayChartData, visibleKeys, zoom.left, zoom.right) : null;
+  const xTicks = zoom ? fitXAxis(zoom.left, zoom.right) : undefined;
+
+  const labelOf = (e) => (e && e.activeLabel != null ? Number(e.activeLabel) : null);
+  // A press before the chart has seen any hover has no label yet, so the
+  // first move after it fills in the start.
+  const startDrag = (e) => {
+    const x = labelOf(e);
+    setDrag({ start: x, end: x });
+  };
+  const moveDrag = (e) => {
+    const x = labelOf(e);
+    if (drag && x !== null) setDrag((d) => d && { start: d.start ?? x, end: x });
+  };
+  const endDrag = (e) => {
+    const end = labelOf(e) ?? drag?.end;
+    if (drag && drag.start !== null && end !== null && drag.start !== end) {
+      setZoom({ left: Math.min(drag.start, end), right: Math.max(drag.start, end) });
+    }
+    setDrag(null);
+  };
+  const setRange = (full) => {
+    setShowFullLifetime(full);
+    setZoom(null);
+  };
 
   const takeSnapshot = (note) => {
     const snapshot = {
@@ -377,15 +408,50 @@ export default function Basic() {
 
       <div className="chart-wrap">
         <div className="chart-toolbar">
-          <button className={`chart-toggle-btn${!showFullLifetime ? ' active' : ''}`} onClick={() => setShowFullLifetime(false)}>To Retirement</button>
-          <button className={`chart-toggle-btn${showFullLifetime ? ' active' : ''}`} onClick={() => setShowFullLifetime(true)}>Full Lifetime</button>
+          <button className={`chart-toggle-btn${!showFullLifetime ? ' active' : ''}`} onClick={() => setRange(false)}>To Retirement</button>
+          <button className={`chart-toggle-btn${showFullLifetime ? ' active' : ''}`} onClick={() => setRange(true)}>Full Lifetime</button>
+          {zoom ? (
+            <button className="chart-toggle-btn" onClick={() => setZoom(null)}>
+              Reset zoom ({fmtYearTick(zoom.left)} – {fmtYearTick(zoom.right)})
+            </button>
+          ) : (
+            <span className="chart-hint">Drag across the chart to zoom</span>
+          )}
           <LineMenu options={lineOptions} isVisible={isVisible} onToggle={toggleLine} />
         </div>
+        <div className={`chart-zoom${drag ? ' chart-zoom--dragging' : ''}`} onDoubleClick={() => setZoom(null)}>
         <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={displayChartData} margin={{ top: 8, right: 16, left: 16, bottom: 0 }}>
+          <LineChart
+            data={displayChartData}
+            margin={{ top: 8, right: 16, left: 16, bottom: 0 }}
+            onMouseDown={startDrag}
+            onMouseMove={moveDrag}
+            onMouseUp={endDrag}
+            onMouseLeave={endDrag}
+          >
             <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-            <XAxis dataKey="year" type="number" domain={['dataMin', 'dataMax']} allowDecimals={false} tickFormatter={(t) => START_YEAR + t} tick={{ fill: '#6b7280', fontSize: 11 }} tickLine={false} axisLine={false} />
-            <YAxis tickFormatter={v => v >= 1e6 ? `$${(v/1e6).toFixed(1)}M` : `$${(v/1000).toFixed(0)}k`} tick={{ fill: '#6b7280', fontSize: 11 }} tickLine={false} axisLine={false} width={72} />
+            <XAxis
+              dataKey="year"
+              type="number"
+              domain={zoom ? [zoom.left, zoom.right] : ['dataMin', 'dataMax']}
+              ticks={xTicks}
+              allowDataOverflow
+              allowDecimals={false}
+              tickFormatter={fmtYearTick}
+              tick={{ fill: '#6b7280', fontSize: 11 }}
+              tickLine={false}
+              axisLine={false}
+            />
+            <YAxis
+              domain={yAxisFit?.domain ?? ['auto', 'auto']}
+              ticks={yAxisFit?.ticks}
+              allowDataOverflow={!!yAxisFit}
+              tickFormatter={(v) => fmtAxis$(v, yAxisFit?.step)}
+              tick={{ fill: '#6b7280', fontSize: 11 }}
+              tickLine={false}
+              axisLine={false}
+              width={72}
+            />
             <Tooltip
               contentStyle={{ background: '#1f2937', border: '1px solid #374151', borderRadius: '0.5rem', fontSize: '0.8rem' }}
               labelStyle={{ color: '#9ca3af', marginBottom: '0.35rem' }}
@@ -395,10 +461,10 @@ export default function Basic() {
             <Legend wrapperStyle={{ fontSize: '0.78rem', paddingTop: '0.75rem' }} />
             <ReferenceLine x={years} stroke="#6b7280" strokeDasharray="4 3" label={{ value: `Retirement (${POST_RETIREMENT_ARR * 100}% ARR post)`, position: 'insideTopRight', fill: '#6b7280', fontSize: 11 }} />
             {isVisible('Expected') && (
-              <Line type="monotone" dataKey="Expected" name="Original plan" stroke="#818cf8" strokeWidth={2} dot={false} connectNulls />
+              <Line type="monotone" dataKey="Expected" name="Original plan" stroke="#818cf8" strokeWidth={2} dot={false} connectNulls isAnimationActive={!zoom} />
             )}
             {isVisible('Infl. Adjusted') && (
-              <Line type="monotone" dataKey="Infl. Adjusted" stroke="#2dd4bf" strokeWidth={2} dot={false} strokeDasharray="5 3" connectNulls />
+              <Line type="monotone" dataKey="Infl. Adjusted" stroke="#2dd4bf" strokeWidth={2} dot={false} strokeDasharray="5 3" connectNulls isAnimationActive={!zoom} />
             )}
             {validCheckIns.filter((c) => isVisible(c.key)).map((c) => (
               <Line
@@ -411,16 +477,21 @@ export default function Basic() {
                 strokeOpacity={c === latestCheckIn ? 1 : 0.7}
                 dot={false}
                 connectNulls
+                isAnimationActive={!zoom}
               />
             ))}
             {checkIns.length > 0 && isVisible('Check-in') && (
               <Line type="monotone" dataKey="Check-in" stroke="#f59e0b" strokeWidth={0} dot={{ r: 5, fill: '#f59e0b', stroke: '#0c0c14', strokeWidth: 2 }} activeDot={{ r: 6 }} connectNulls isAnimationActive={false} legendType="circle" />
             )}
             {compareSnapshot && isVisible('Snapshot') && (
-              <Line type="monotone" dataKey="Snapshot" name={`Snapshot: ${snapshotLabel(compareSnapshot)}`} stroke="#f472b6" strokeWidth={2} dot={false} strokeDasharray="2 3" />
+              <Line type="monotone" dataKey="Snapshot" name={`Snapshot: ${snapshotLabel(compareSnapshot)}`} stroke="#f472b6" strokeWidth={2} dot={false} strokeDasharray="2 3" isAnimationActive={!zoom} />
+            )}
+            {drag && drag.start !== null && drag.start !== drag.end && (
+              <ReferenceArea x1={drag.start} x2={drag.end} fill="#6366f1" fillOpacity={0.15} stroke="#6366f1" strokeOpacity={0.5} />
             )}
           </LineChart>
         </ResponsiveContainer>
+        </div>
       </div>
 
       <div className="table-wrap">
