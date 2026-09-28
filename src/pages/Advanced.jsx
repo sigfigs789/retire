@@ -67,7 +67,6 @@ export default function Advanced() {
   const [spouseSS, setSpouseSS] = useState(3);
   const [drawdownRate, setDrawdownRate] = useState(4);
   const [annualContribution, setAnnualContribution] = useState(24000);
-  const [startingAge, setStartingAge] = useState(32);
   const [showFullLifetime, setShowFullLifetime] = useState(false);
 
   const combinedSSMonthly = SS_LEVELS[selfSS].monthly + SS_LEVELS[spouseSS].monthly;
@@ -93,31 +92,31 @@ export default function Advanced() {
         const dollDiff = actual !== null && !isNaN(actual) ? actual - expected : null;
         return { expected, inflAdj, pctDiff, dollDiff };
       });
-      return { i, calYear, age: startingAge + i + 1, actual, caseVals };
+      return { i, calYear, actual, caseVals };
     }),
-    [years, projected, actuals, startingAge]
+    [years, projected, actuals]
   );
 
   const POST_RETIREMENT_ARR = 0.05;
   const POST_RETIREMENT_INFLATION = 0.03;
+  const POST_RETIREMENT_YEARS = 35;
 
   const chartData = useMemo(() => {
     const accum = rows.map((row, i) => ({
-      age: row.age,
+      year: i + 1,
       ...Object.fromEntries(cases.map((c, ci) => [c.label, Math.round(projected[ci]?.[i]?.expected ?? 0)])),
       ...Object.fromEntries(cases.map((c, ci) => [`${c.label} Real`, Math.round(projected[ci]?.[i]?.inflAdj ?? 0)])),
       ...(row.actual !== null ? { Actual: row.actual } : {}),
     }));
 
-    const retirementAge = startingAge + years;
     const retirementVals = cases.map((_, ci) => projected[ci]?.at(-1)?.expected ?? 0);
     const withdrawals = cases.map((_, ci) => retirementVals[ci] * (drawdownRate / 100));
     const values = [...retirementVals];
     const inflFactors = cases.map((c) => Math.pow(1 + c.inflation / 100, years));
     const drawdown = [];
 
-    for (let i = 1; retirementAge + i <= 100; i++) {
-      const point = { age: retirementAge + i };
+    for (let i = 1; i <= POST_RETIREMENT_YEARS; i++) {
+      const point = { year: years + i };
       let anyPositive = false;
       cases.forEach((c, ci) => {
         values[ci] = values[ci] * (1 + POST_RETIREMENT_ARR) - withdrawals[ci];
@@ -131,7 +130,7 @@ export default function Advanced() {
     }
 
     return [...accum, ...drawdown];
-  }, [rows, cases, projected, drawdownRate, startingAge, years]);
+  }, [rows, cases, projected, drawdownRate, years]);
 
   const handleActual = (index, value) => {
     setActuals((prev) => ({ ...prev, [index]: value }));
@@ -157,20 +156,6 @@ export default function Advanced() {
                 step={1000}
                 onChange={(e) => setInitialValue(Number(e.target.value))}
               />
-            </div>
-          </div>
-          <div className="setting-group">
-            <label className="setting-label-text">Starting Age</label>
-            <div className="field-input">
-              <input
-                type="number"
-                value={startingAge}
-                min={1}
-                max={80}
-                step={1}
-                onChange={(e) => setStartingAge(Number(e.target.value))}
-              />
-              <span className="field-suffix">yrs</span>
             </div>
           </div>
           <div className="setting-group">
@@ -298,12 +283,12 @@ export default function Advanced() {
       <div className="chart-wrap">
         <div className="chart-toolbar">
           <button className={`chart-toggle-btn${!showFullLifetime ? ' active' : ''}`} onClick={() => setShowFullLifetime(false)}>To Retirement</button>
-          <button className={`chart-toggle-btn${showFullLifetime ? ' active' : ''}`} onClick={() => setShowFullLifetime(true)}>To Age 100</button>
+          <button className={`chart-toggle-btn${showFullLifetime ? ' active' : ''}`} onClick={() => setShowFullLifetime(true)}>Full Lifetime</button>
         </div>
         <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={showFullLifetime ? chartData : chartData.filter(d => d.age <= startingAge + years)} margin={{ top: 8, right: 16, left: 16, bottom: 0 }}>
+          <LineChart data={showFullLifetime ? chartData : chartData.filter(d => d.year <= years)} margin={{ top: 8, right: 16, left: 16, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-            <XAxis dataKey="age" tick={{ fill: '#6b7280', fontSize: 11 }} tickLine={false} axisLine={false} />
+            <XAxis dataKey="year" tick={{ fill: '#6b7280', fontSize: 11 }} tickLine={false} axisLine={false} />
             <YAxis tickFormatter={v => v >= 1e6 ? `$${(v/1e6).toFixed(1)}M` : `$${(v/1000).toFixed(0)}k`} tick={{ fill: '#6b7280', fontSize: 11 }} tickLine={false} axisLine={false} width={72} />
             <Tooltip
               contentStyle={{ background: '#1f2937', border: '1px solid #374151', borderRadius: '0.5rem', fontSize: '0.8rem' }}
@@ -311,7 +296,7 @@ export default function Advanced() {
               formatter={(v, name) => [new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v), name]}
             />
             <Legend wrapperStyle={{ fontSize: '0.78rem', paddingTop: '0.75rem' }} />
-            <ReferenceLine x={startingAge + years} stroke="#6b7280" strokeDasharray="4 3" label={{ value: `Retirement (${POST_RETIREMENT_ARR * 100}% ARR post)`, position: 'insideTopRight', fill: '#6b7280', fontSize: 11 }} />
+            <ReferenceLine x={years} stroke="#6b7280" strokeDasharray="4 3" label={{ value: `Retirement (${POST_RETIREMENT_ARR * 100}% ARR post)`, position: 'insideTopRight', fill: '#6b7280', fontSize: 11 }} />
             {cases.map((c, ci) => (
               <Line key={ci} type="monotone" dataKey={c.label} stroke={['#818cf8','#2dd4bf','#34d399'][ci]} strokeWidth={2} dot={false} />
             ))}
@@ -328,7 +313,6 @@ export default function Advanced() {
           <thead>
             <tr>
               <th rowSpan={2}>Year</th>
-              <th rowSpan={2}>Age</th>
               {cases.map((c, ci) => (
                 <th key={ci} colSpan={2} className="case-header">{c.label}</th>
               ))}
@@ -350,7 +334,6 @@ export default function Advanced() {
             {rows.map((row) => (
               <tr key={row.i}>
                 <td className="col-year">{row.calYear}</td>
-                <td className="muted">{row.age}</td>
                 {row.caseVals.map((cv, ci) => (
                   <>
                     <td key={`e-${ci}`}>{fmt$(cv.expected)}</td>
