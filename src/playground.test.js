@@ -30,3 +30,9 @@ test('reports how long the money lasts with a high drawdown', () => {
   expect(p.lastsYears).toBe(9);
   expect(p.series.at(-1).balance).toBe(0);
 });
+
+test('nominal balance is the real balance re-inflated', () => {
+  const p = playgroundProjection({ ...base, inflation: 3 });
+  expect(p.series[10].nominal).toBeCloseTo(100000 * Math.pow(1.07, 10));
+  expect(p.series[15].nominal).toBeCloseTo(p.series[15].balance * Math.pow(1.03, 15));
+});

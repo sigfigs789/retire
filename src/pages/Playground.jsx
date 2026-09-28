@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { START_YEAR } from '../projection';
 import { playgroundProjection, RETIREMENT_YEARS } from '../playground';
 
@@ -50,7 +50,11 @@ export default function Playground() {
   const set = (key) => (value) => setInputs((prev) => ({ ...prev, [key]: value }));
 
   const p = useMemo(() => playgroundProjection(inputs), [inputs]);
-  const chartData = p.series.map((d) => ({ year: d.year, "Portfolio (today's $)": Math.round(d.balance) }));
+  const chartData = p.series.map((d) => ({
+    year: d.year,
+    'Portfolio (nominal)': Math.round(d.nominal),
+    "Portfolio (today's $)": Math.round(d.balance),
+  }));
 
   return (
     <div className="page">
@@ -84,7 +88,7 @@ export default function Playground() {
         <div className="summary-card">
           <span className="summary-label">From Portfolio ({drawdownRate.toFixed(1)}%)</span>
           <span className="summary-value teal">{fmt$(p.withdrawal)}</span>
-          <span className="summary-sub">of {fmt$(p.atRetirement)} at retirement, today's $</span>
+          <span className="summary-sub">of {fmt$(p.atRetirement)} at retirement, today's $ ({fmt$(p.series[years].nominal)} nominal)</span>
         </div>
         <div className="summary-card">
           <span className="summary-label">From Social Security</span>
@@ -112,7 +116,9 @@ export default function Playground() {
               labelFormatter={(y) => START_YEAR + y}
               formatter={(v, name) => [fmt$(v), name]}
             />
+            <Legend wrapperStyle={{ fontSize: '0.78rem', paddingTop: '0.75rem' }} />
             <ReferenceLine x={years} stroke="#6b7280" strokeDasharray="4 3" label={{ value: 'Retirement', position: 'insideTopRight', fill: '#6b7280', fontSize: 11 }} />
+            <Line type="monotone" dataKey="Portfolio (nominal)" stroke="#818cf8" strokeWidth={2} dot={false} isAnimationActive={false} />
             <Line type="monotone" dataKey="Portfolio (today's $)" stroke="#2dd4bf" strokeWidth={2.5} dot={false} isAnimationActive={false} />
           </LineChart>
         </ResponsiveContainer>

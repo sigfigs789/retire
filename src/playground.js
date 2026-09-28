@@ -2,8 +2,8 @@ import { projectValue } from './projection';
 
 export const RETIREMENT_YEARS = 40;
 
-// Everything comes out in today's dollars. Savings grow at `arr`% nominal and are
-// deflated by `inflation`%; in retirement the withdrawal is fixed in real terms
+// Balances come out in today's dollars, with `nominal` alongside. Savings grow
+// at `arr`% nominal and are deflated by `inflation`%; in retirement the withdrawal is fixed in real terms
 // at `drawdownRate`% of the retirement balance, and the balance earns the real
 // return. Social Security is entered as today's-dollar monthly benefits.
 export function playgroundProjection({ initialValue, annualContribution, years, arr, inflation, drawdownRate, selfSS, spouseSS }) {
@@ -30,6 +30,8 @@ export function playgroundProjection({ initialValue, annualContribution, years, 
     }
     series.push({ year: years + i, balance });
   }
+
+  series.forEach((d) => { d.nominal = d.balance * deflate(d.year); });
 
   return { series, atRetirement, withdrawal, ssAnnual, income: withdrawal + ssAnnual, realRate, lastsYears };
 }
