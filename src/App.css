@@ -267,14 +267,6 @@ body {
   background: #17172a;
 }
 
-.row-positive {
-  background: rgba(34, 197, 94, 0.03);
-}
-
-.row-negative {
-  background: rgba(239, 68, 68, 0.03);
-}
-
 .col-year {
   font-weight: 600;
   color: #9ca3af;
@@ -292,62 +284,6 @@ body {
 .negative {
   color: #ef4444;
   font-weight: 600;
-}
-
-/* Actual input */
-.actual-wrap {
-  display: flex;
-  align-items: center;
-  background: #0c0c14;
-  border: 1px solid #2a2a40;
-  border-radius: 6px;
-  overflow: hidden;
-  width: 150px;
-  transition: border-color 0.15s;
-}
-
-.actual-wrap:focus-within {
-  border-color: #6366f1;
-}
-
-.actual-dollar {
-  padding: 0 0.35rem 0 0.55rem;
-  font-size: 0.85rem;
-  color: #4b5563;
-  user-select: none;
-}
-
-.actual-input {
-  background: transparent;
-  border: none;
-  outline: none;
-  color: #f1f5f9;
-  font-size: 0.875rem;
-  padding: 0.4rem 0.5rem 0.4rem 0;
-  width: 100%;
-  font-variant-numeric: tabular-nums;
-}
-
-/* Badge */
-.badge {
-  display: inline-block;
-  padding: 0.2rem 0.55rem;
-  border-radius: 99px;
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-
-.badge-green {
-  background: rgba(34, 197, 94, 0.12);
-  color: #22c55e;
-  border: 1px solid rgba(34, 197, 94, 0.2);
-}
-
-.badge-red {
-  background: rgba(239, 68, 68, 0.12);
-  color: #ef4444;
-  border: 1px solid rgba(239, 68, 68, 0.2);
 }
 
 /* Social Security slider */
