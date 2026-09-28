@@ -112,24 +112,29 @@ export default function Basic() {
   const POST_RETIREMENT_INFLATION = 0.03;
   const POST_RETIREMENT_YEARS = 35;
 
-  // The latest check-in inside the accumulation window drives the re-projection:
-  // same rate and contributions, but starting from the real balance on that month.
-  const validCheckIns = useMemo(() =>
-    checkIns
+  // Each check-in re-projects from its real balance at the same rate. A check-in
+  // can change the annual contribution from that month on; later check-ins
+  // without one inherit the most recent change, else the main setting.
+  const validCheckIns = useMemo(() => {
+    let contribution = annualContribution;
+    return checkIns
       .map((c) => ({ ...c, t: monthToT(c.month), key: `Re-projected ${c.month}` }))
       .filter((c) => c.t > 0 && c.t < years)
-      .sort((a, b) => a.t - b.t),
-    [checkIns, years]
-  );
+      .sort((a, b) => a.t - b.t)
+      .map((c) => {
+        if (c.contribution != null) contribution = c.contribution;
+        return { ...c, effectiveContribution: contribution };
+      });
+  }, [checkIns, years, annualContribution]);
   const latestCheckIn = validCheckIns.at(-1) ?? null;
 
   const reprojectedAtRetirement = latestCheckIn
-    ? projectValue(latestCheckIn.value, years - latestCheckIn.t, arr, annualContribution)
+    ? projectValue(latestCheckIn.value, years - latestCheckIn.t, arr, latestCheckIn.effectiveContribution)
     : null;
 
   const reprojectedAtYear = (year) =>
     latestCheckIn && year >= latestCheckIn.t
-      ? projectValue(latestCheckIn.value, year - latestCheckIn.t, arr, annualContribution)
+      ? projectValue(latestCheckIn.value, year - latestCheckIn.t, arr, latestCheckIn.effectiveContribution)
       : null;
 
   // Withdrawal is fixed in real terms: it starts at drawdownRate% of the
@@ -179,9 +184,9 @@ export default function Basic() {
     validCheckIns.forEach((c) => {
       point(c.t)[c.key] = c.value;
       for (let year = Math.floor(c.t) + 1; year <= years; year++) {
-        point(year)[c.key] = Math.round(projectValue(c.value, year - c.t, arr, annualContribution));
+        point(year)[c.key] = Math.round(projectValue(c.value, year - c.t, arr, c.effectiveContribution));
       }
-      const atRetirement = projectValue(c.value, years - c.t, arr, annualContribution);
+      const atRetirement = projectValue(c.value, years - c.t, arr, c.effectiveContribution);
       drawdownFrom(atRetirement).forEach((d) => { point(d.year)[c.key] = d.nominal; });
     });
 
@@ -206,8 +211,8 @@ export default function Basic() {
   const isVisible = (key) => lineOverrides[key] ?? lineOptions.find((o) => o.key === key)?.defaultVisible ?? true;
   const toggleLine = (key) => setLineOverrides((prev) => ({ ...prev, [key]: !isVisible(key) }));
 
-  const addCheckIn = (month, value) => {
-    setCheckIns((prev) => [...prev.filter((c) => c.month !== month), { month, value }]);
+  const addCheckIn = (month, value, contribution) => {
+    setCheckIns((prev) => [...prev.filter((c) => c.month !== month), { month, value, contribution }]);
   };
 
   const deleteCheckIn = (month) => {
@@ -341,6 +346,8 @@ export default function Basic() {
 
       <CheckInPanel
         checkIns={checkIns}
+        validCheckIns={validCheckIns}
+        annualContribution={annualContribution}
         years={years}
         planAt={(t) => projectValue(initialValue, t, arr, annualContribution)}
         latest={latestCheckIn}

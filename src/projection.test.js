@@ -19,3 +19,10 @@ test('re-projecting from an on-plan balance reproduces the original plan', () =>
   const onPlan = projectValue(201252, t, 7, 24000);
   expect(projectValue(onPlan, 33 - t, 7, 24000)).toBeCloseTo(projectValue(201252, 33, 7, 24000), 2);
 });
+
+test('a higher contribution from a check-in onward raises the re-projection', () => {
+  const t = monthToT('2026-09');
+  const base = projectValue(250000, 33 - t, 7, 24000);
+  const raised = projectValue(250000, 33 - t, 7, 30000);
+  expect(raised).toBeGreaterThan(base);
+});

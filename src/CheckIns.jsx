@@ -17,7 +17,7 @@ function Delta({ now, then }) {
 
 // Check-ins: log the real balance for a month. The latest one re-projects
 // the plan forward from that balance.
-export default function CheckInPanel({ checkIns, years, planAt, latest, reprojectedAtRetirement, planAtRetirement, onAdd, onDelete }) {
+export default function CheckInPanel({ checkIns, validCheckIns, annualContribution, years, planAt, latest, reprojectedAtRetirement, planAtRetirement, onAdd, onDelete }) {
   const minMonth = tToMonth(1 / 12);
   const maxMonth = tToMonth(years - 1 / 12);
   const [month, setMonth] = useState(() => {
@@ -25,16 +25,23 @@ export default function CheckInPanel({ checkIns, years, planAt, latest, reprojec
     return now < minMonth ? minMonth : now > maxMonth ? maxMonth : now;
   });
   const [value, setValue] = useState('');
+  const [contribution, setContribution] = useState('');
 
   const t = month ? monthToT(month) : NaN;
   const inRange = t > 0 && t < years;
-  const canAdd = inRange && value !== '' && !isNaN(Number(value));
+  const canAdd = inRange && value !== '' && !isNaN(Number(value)) && (contribution === '' || !isNaN(Number(contribution)));
+
+  // What a blank contribution would inherit for the chosen month.
+  const inheritedContribution = [...validCheckIns].reverse().find((c) => c.t < t)?.effectiveContribution ?? annualContribution;
 
   const add = () => {
     if (!canAdd) return;
-    onAdd(month, Number(value));
+    onAdd(month, Number(value), contribution === '' ? null : Number(contribution));
     setValue('');
+    setContribution('');
   };
+
+  const effectiveByMonth = Object.fromEntries(validCheckIns.map((c) => [c.month, c.effectiveContribution]));
 
   const sorted = [...checkIns].sort((a, b) => b.month.localeCompare(a.month));
 
@@ -66,6 +73,18 @@ export default function CheckInPanel({ checkIns, years, planAt, latest, reprojec
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && add()}
           />
+          <input
+            type="number"
+            className="snapshot-note-input"
+            aria-label="New annual contribution (optional)"
+            title="Optional. Applies from this month on; blank keeps the current contribution."
+            placeholder={`Contribution/yr (${fmt$(inheritedContribution)})`}
+            min={0}
+            step={1000}
+            value={contribution}
+            onChange={(e) => setContribution(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && add()}
+          />
           <button className="snapshot-btn snapshot-btn--primary" onClick={add} disabled={!canAdd}>Add check-in</button>
         </div>
       </div>
@@ -82,7 +101,13 @@ export default function CheckInPanel({ checkIns, years, planAt, latest, reprojec
                   <span className="snapshot-name">{fmtMonthT(ct)}: {fmt$(c.value)}{isLatest && <span className="snapshot-tag">Latest</span>}</span>
                   <span className="snapshot-sub">
                     {valid
-                      ? <>Plan expected {fmt$(planAt(ct))} · <Delta now={c.value} then={planAt(ct)} /></>
+                      ? <>
+                          Plan expected {fmt$(planAt(ct))} · <Delta now={c.value} then={planAt(ct)} />
+                          {' · '}
+                          {c.contribution != null
+                            ? <span className="checkin-contribution">Contribution changed to {fmt$(c.contribution)}/yr</span>
+                            : <>{fmt$(effectiveByMonth[c.month])}/yr contributions</>}
+                        </>
                       : 'Outside the plan window'}
                   </span>
                 </div>

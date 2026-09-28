@@ -708,3 +708,7 @@ body {
   border-radius: 2px;
   flex-shrink: 0;
 }
+
+.checkin-contribution {
+  color: #a3e635;
+}
