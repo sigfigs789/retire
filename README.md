@@ -41,4 +41,4 @@ Import this GitHub repo into Vercel and use the default Vite settings:
 - Build Command: `npm run build`
 - Output Directory: `dist`
 
-The included `vercel.json` rewrites all routes to `index.html` so React Router pages like `/advanced` work when loaded directly.
+The included `vercel.json` rewrites all routes to `index.html` so deep links load the app directly.

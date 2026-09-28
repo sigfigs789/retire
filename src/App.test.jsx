@@ -1,9 +1,9 @@
 import { render, screen } from '@testing-library/react';
 import App from './App';
 
-test('renders retirement calculator navigation', () => {
+test('renders the retirement calculator', () => {
   render(<App />);
   expect(screen.getByText('Retire')).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: /Basic/i })).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: /Advanced/i })).toBeInTheDocument();
+  expect(screen.getByText('Basic Calculator')).toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: /Advanced/i })).not.toBeInTheDocument();
 });
